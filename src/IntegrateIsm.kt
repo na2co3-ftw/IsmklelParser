@@ -67,12 +67,12 @@ fun integrateIsm(axn: Word, ism: Word): Word {
 	var ismDets = ism.details
 	for (axnDetail in axn.details) {
 		val (dets, rest) = ismDets.partition {
-			it.tag == axnDetail.tag
+			it.tags == axnDetail.tags
 		}
 		if (dets.isNotEmpty()) {
 			val text = StringBuilder(axnDetail.text).append('\n')
 			dets.joinTo(text, "\n", transform = { it.text })
-			lozDets.add(Detail(axnDetail.tag, text.toString()))
+			lozDets.add(Detail(axnDetail.tags, text.toString()))
 		} else {
 			lozDets.add(axnDetail)
 		}
@@ -98,14 +98,15 @@ fun integrateIsm(axn: Word, ism: Word): Word {
 	lozExps.addAll(ismExps)
 
 	return Word(
-		axn.lemma,
-		lozDefs,
-		lozRels,
-		lozAtolasEtym,
-		lozEtym,
-		lozOtherLang,
-		axn.tags,
-		lozDets,
-		lozExps
+			axn.lemma,
+			lozDefs,
+			lozRels,
+			lozAtolasEtym,
+			lozEtym,
+			lozOtherLang,
+			axn.tags,
+			lozDets,
+			lozExps,
+			axn.image ?: ism.image
 	)
 }

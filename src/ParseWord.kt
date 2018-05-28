@@ -3,8 +3,8 @@ private val lemmaExcludeRegex = Regex(".,\\S|[^ -~]|^@")
 private val homonymPostfixRegex = Regex("\\(\\d+\\)$")
 private val postDescRegex = Regex("[。:→←].*$")
 private val preDescRegex = Regex("^（[a-z].*?）")
-private val etymologyRegex = Regex("^[-a-z0-9制古赤初中先定高恣＠]")
-private val etymologyPriorRegex = Regex("^(?:[制古赤初中先定高]|[-a-z0-9恣＠].*?[制古赤初中先定高])")
+private val atolasEtymologyRegex = Regex(";|^(?!(?:a?lakta|kako|sorn|ryuu|seren))[a-z]+(?::(?!a?lakta)[a-z]+)?$")
+private val detailTagRegex = Regex("^［(文化|語法|擬声|注釈)］(?:［(文化|語法)］)?")
 
 fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 	if (lemma.contains(lemmaExcludeRegex)) {
@@ -21,6 +21,7 @@ fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 	val tags = mutableListOf<String>()
 	val details = mutableListOf<Detail>()
 	val examples = mutableListOf<Example>()
+	var image: String? = null
 
 	while (row < contents.size) {
 		val line = contents[row]
@@ -47,7 +48,11 @@ fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 		} else if (defTags.contains("レベル")) {
 			if (lineContents.isNotEmpty() && '１' <= lineContents[0] && lineContents[0] <= '６') {
 				tags.add("レベル" + (lineContents[0] - '０'))
+			} else {
+				println("$lemma: invalid level")
 			}
+		} else if (defTags.any { it == "文化" || it == "語法" }) {
+			break
 		} else {
 			var desc: String? = null
 			val postDesc = postDescRegex.find(lineContents)
@@ -71,41 +76,22 @@ fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 		row++
 	}
 
-	while (row < contents.size) {
+	if (row < contents.size) {
 		val line = contents[row]
-		if (line.startsWith('［') || line.startsWith('【')) {
-			break
-		}
-		if (line.contains(etymologyRegex)) {
-			if (row + 1 < contents.size) {
-				if (line.contains(';') && contents[row + 1].contains(etymologyRegex) ||
-						contents[row + 1].contains(etymologyPriorRegex)
-				) {
-					if (atolasEtymology == null) {
-						atolasEtymology = line
-					} else {
-						println("$lemma: duplicate atolasEtymology")
-						atolasEtymology += "\n" + line
-					}
-
-					row++
-					etymology = contents[row]
-					row++
-					break
-				}
+		if (!line.startsWith('［') && !line.startsWith('【')) {
+			if (line.contains(atolasEtymologyRegex)) {
+				atolasEtymology = line
+				row++
 			}
+		}
+	}
+
+	if (row < contents.size) {
+		val line = contents[row]
+		if (!line.startsWith('［') && !line.startsWith('【')) {
 			etymology = line
 			row++
-			break
-		} else {
-			if (atolasEtymology == null) {
-				atolasEtymology = line
-			} else {
-				println("$lemma: duplicate atolasEtymology")
-				atolasEtymology += "\n" + line
-			}
 		}
-		row++
 	}
 
 	while (row < contents.size) {
@@ -122,33 +108,33 @@ fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 		row++
 	}
 
-	var detailsSection = true
 	while (row < contents.size) {
 		val tagLine = contents[row]
-		if (tagLine.startsWith('［')) {
-			if (!detailsSection && !ism) {
-				println("$lemma: ［］ after 【】")
+		val detailTagsMatch = detailTagRegex.find(tagLine)
+		if (detailTagsMatch != null) {
+			val detailTags = if (detailTagsMatch.groups[2] != null) {
+				listOf(detailTagsMatch.groups[1]!!.value, detailTagsMatch.groups[2]!!.value)
+			} else {
+				listOf(detailTagsMatch.groups[1]!!.value)
 			}
-			val tagEndPos = tagLine.indexOf('］', 1)
-			if (tagEndPos < 0) {
-				println("$lemma: missing ］")
-			} else if (tagLine.length > tagEndPos + 1) {
+			if (tagLine.length > detailTagsMatch.range.endInclusive + 1) {
 				println("$lemma: trailing text")
 			}
-			val tag = if (tagEndPos >= 0) tagLine.substring(1, tagEndPos) else ""
 			row++
 
 			val detailText = StringBuilder()
 			while (row < contents.size) {
-				if (contents[row].startsWith('［') || contents[row].startsWith('【')) {
+				if (contents[row].contains(detailTagRegex) || contents[row].startsWith('【')) {
 					break
 				}
 				detailText.append(contents[row]).append("\n")
 				row++
 			}
-			details.add(Detail(tag, detailText.dropLast(1).toString()))
-		} else if (tagLine.startsWith('【')) {
-			detailsSection = false;
+			details.add(Detail(detailTags, detailText.dropLast(1).toString()))
+			continue
+		}
+
+		if (tagLine.startsWith('【')) {
 			val tagEndPos = tagLine.indexOf('】', 1)
 			if (tagEndPos < 0) {
 				println("$lemma: missing 】")
@@ -159,11 +145,12 @@ fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 			row++
 
 			if (tag == "画像") {
+				image = "$lemma.jpg"
 				continue
 			}
 			val texts = mutableListOf<String>()
 			while (row < contents.size) {
-				if (contents[row].startsWith('［') || contents[row].startsWith('【')) {
+				if (contents[row].contains(detailTagRegex) || contents[row].startsWith('【')) {
 					break
 				}
 				texts.add(contents[row])
@@ -185,6 +172,7 @@ fun parseWord(lemma: String, exp: String, ism: Boolean): Word? {
 			otherLanguages,
 			tags,
 			details,
-			examples
+			examples,
+			image
 	)
 }

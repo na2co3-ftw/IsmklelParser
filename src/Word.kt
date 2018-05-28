@@ -8,7 +8,8 @@ class Word(
 	val otherLanguages: String?,
 	val tags: List<String>,
 	val details: List<Detail>,
-	val examples: List<Example>
+	val examples: List<Example>,
+	val image: String?
 )
 
 class Definition(
@@ -23,7 +24,7 @@ class Relation(
 )
 
 class Detail(
-	val tag: String,
+	val tags: List<String>,
 	val text: String
 )
 
